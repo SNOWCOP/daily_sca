@@ -1,6 +1,6 @@
 # daily_sca_reconstruction
 
-
+This is the repo for the daily snow cover area estimation in the OEMC project. It is the second step in estimation the snow water equivalent.
 
 ## Getting started
 
