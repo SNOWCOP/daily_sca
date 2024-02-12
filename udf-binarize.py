@@ -26,6 +26,8 @@ def apply_datacube(cube: XarrayDataCube,
     
     array = cube.get_array()
     
+
+    
     # valid pixel, no cloud, SCF between snowT and 100 : set as 100 
     condition1 = array.notnull() & (array >= snowT) & (array <= 100) & (array!=205)
     array = xr.where(condition1, 100, array)
@@ -34,6 +36,7 @@ def apply_datacube(cube: XarrayDataCube,
     condition2 = array.isnull() | ((array >= 0) & (array < snowT) & (array!=205))
     array = xr.where(condition2, 0, array)
 
+    
     
     array = array.astype(np.int16)
 
