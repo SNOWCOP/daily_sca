@@ -8,32 +8,35 @@ Created on Tue Dec  5 16:12:16 2023
 
 from openeo.udf import XarrayDataCube
 from openeo.udf.debug import inspect
-from openeo.metadata import CollectionMetadata
+from openeo.metadata import CollectionMetadata, SpatialDimension
 
 import numpy as np
 import xarray as xr
 
 
 
-def apply_metadata(input_metadata:CollectionMetadata, 
-                   context:dict) -> CollectionMetadata:
-
-    pixel_ratio = context["pixel_ratio"]
+def apply_metadata(metadata: CollectionMetadata,
+                    context: dict) -> CollectionMetadata:
+    """
+    Modify metadata according to up-sampling factor
+    """
     
-    xstep = input_metadata.get('x','step')
-    ystep = input_metadata.get('y','step')
-    new_metadata = {
-          "x": {"type": "spatial", 
-                "axis": "x", 
-                "step": xstep/pixel_ratio, 
-                "reference_system": 32632},
-          "y": {"type": "spatial", 
-                "axis": "y", 
-                "step": ystep/pixel_ratio, 
-                "reference_system": 32632},
-          "t": {"type": "temporal"}
-    }
-    return CollectionMetadata(new_metadata)
+    pixel_ratio = 25. #context["pixel_ratio"]
+    
+    new_dimensions = metadata._dimensions.copy()
+    for index, dim in enumerate(new_dimensions):
+        if isinstance(dim, SpatialDimension):
+ 
+            new_dim = SpatialDimension(name=dim.name,
+                                        extent=dim.extent,
+                                        crs=dim.crs,
+                                        step=dim.step * pixel_ratio)
+            new_dimensions[index] = new_dim
+
+    updated_metadata = metadata._clone_and_update(dimensions=new_dimensions)
+    return updated_metadata
+
+
 
 
 def scf(array: np.array, 
@@ -71,8 +74,8 @@ def scf(array: np.array,
     
     """
     #x and y dimensions
-    assert array.ndim == 2
-    
+    # assert array.ndim == 2
+    pixel_ratio = 25
     
     # number of columns and rows of the output aggregated array
     nrows = int(np.shape(array)[0]/pixel_ratio)
@@ -142,36 +145,44 @@ def apply_datacube(cube: XarrayDataCube, context: dict) -> XarrayDataCube:
     # Pixel size of the original image
     init_pixel_size_x = array.coords['x'][-1] - array.coords['x'][-2]
     init_pixel_size_y = array.coords['y'][-1] - array.coords['y'][-2]
+    
+    # new spatial coordinates
+    xmin = array.coords['x'].min() - init_pixel_size_x/2 + 250#init_pixel_size_x/4
+    xmax = array.coords['x'].max() + init_pixel_size_x/2 - 250#init_pixel_size_x/4
+    # segno invertito perchè res y è negativa
+    ymin = array.coords['y'].min() + init_pixel_size_y/2 + 250#init_pixel_size_x/4
+    ymax = array.coords['y'].max() - init_pixel_size_y/2 - 250#init_pixel_size_x/4
+    
+    
+    coord_x = np.linspace(start=xmin, 
+                          stop=xmax,
+                          num=array.shape[-1]/25)
+    coord_y = np.linspace(start=ymin, 
+                          stop=ymax,
+                          num=array.shape[-2]/25)
+    
+    # Keep the original time coordinates.
+    coord_t = cube.get_array().coords['t'].values
+    
+    predicted_array = np.zeros(len(coord_t), len(coord_y), len(coord_x))
+    for it, t in (array.coords['t'].values):
+        print(t)
+        predicted_array[it, :, :] = scf(np.squeeze(array.sel(t=t).data), 
+                                                     pixel_ratio=pixel_ratio)
 
     
-        
-    # for date in array.coords['t']:
-    #     cubearray: xarray.DataArray = array['t'==date].copy()
-    cubearray: xr.DataArray = cube.get_array().copy()
-    print(cubearray.coords)
-    # if cubearray.data.ndim == 3 and cubearray.data.shape[0] == 1:
-    cubearray = cubearray[0]
-    # print(cubearray.coords)
-    # print(cubearray.data.shape)
-    predicted_array = scf(cubearray.data, 
-                          pixel_ratio=pixel_ratio)
-    
-    # NEW COORDINATES
-    xmin = array.coords['x'].min() - 10 + 250
-    xmax = array.coords['x'].max() + 10 - 250
-    ymin = array.coords['y'].min() - 10 + 250
-    ymax = array.coords['y'].max() + 10 - 250
-    coord_x = np.linspace(start = xmin, 
-                          stop = xmax,
-                          num = predicted_array.shape[-2])
-    coord_y = np.linspace(start = ymin, 
-                          stop = ymax,
-                          num = predicted_array.shape[-1])
-    
+    # coord_b = cube.get_array().coords['bands'].values
+
+    # Add a new dimension for time.
     predicted_cube = xr.DataArray(predicted_array, 
-                                  dims=['x', 'y'], 
-                                  coords=dict(x=coord_x, y=coord_y))
+                                      dims=['t',  'y', 'x'], 
+                                      coords=dict(t=coord_t, x=coord_x, y=coord_y))
+            
 
+
+
+
+    # return predicted_array
     return XarrayDataCube(predicted_cube)
 
     

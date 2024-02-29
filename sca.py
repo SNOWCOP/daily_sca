@@ -97,16 +97,20 @@ scf_binary_renamed = scf_binary.rename_labels(dimension="bands",
 # scf_binary_masked = scf_binary_renamed.mask(mask,replacement=0)
 
 
+udf_code = Path('udf-scf.py').read_text()
 
 cube_updated = scf_binary.apply_neighborhood(
     lambda data: data.run_udf(udf=udf_code, runtime='Python-Jep', context=dict()),
     size=[
-        {'dimension': 'x', 'value': 128, 'unit': 'px'},
-        {'dimension': 'y', 'value': 128, 'unit': 'px'}
+        {'dimension': 'x', 'value': 600, 'unit': 'px'},
+        {'dimension': 'y', 'value': 425, 'unit': 'px'}
     ], overlap=[])
 
-cube_updated.download(base_path + os.sep + 'scf_test.nc')
+cube_updated.download(base_path + os.sep + 'scf_test5.nc')
 
+# cp_test = cube_updated.save_result(format='netCDF')
+# job = cp_test.create_job(title='apply_neigh_8')
+# job.start_job()
 ccc
 
 mask = (scf_binary >= 0)*1.0
