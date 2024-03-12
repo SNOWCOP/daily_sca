@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -14,6 +15,7 @@ import xarray as xr
 
 def apply_datacube(cube: XarrayDataCube,
                    context: dict) -> XarrayDataCube:
+    
     """
     If a pixel value is greater or equal then a threshold, will set up as 
     100. If smaller, will be set up as 0.
