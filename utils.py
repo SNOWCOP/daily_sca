@@ -2,6 +2,32 @@ import geopandas as gpd
 from decimal import Decimal,ROUND_FLOOR
 import numpy as np
 
+import geojson
+
+def create_geojson_bbox(bbox_coordinates):
+    """
+    Create a GeoJSON FeatureCollection with a bounding box.
+
+    Parameters:
+    bbox_coordinates (list): A list of bounding box coordinates in the format [min_lon, min_lat, max_lon, max_lat].
+
+    Returns:
+    str: A GeoJSON string representing the bounding box.
+    """
+    min_lon, min_lat, max_lon, max_lat = bbox_coordinates
+    
+    bbox = geojson.Polygon([[
+        [min_lon, min_lat],
+        [min_lon, max_lat],
+        [max_lon, max_lat],
+        [max_lon, min_lat],
+        [min_lon, min_lat]
+    ]])
+    
+    feature = geojson.Feature(geometry=bbox)
+    feature_collection = geojson.FeatureCollection([feature])
+    
+    return geojson.dumps(feature_collection, indent=2)
 
 def extent_from_shp(shp):
     #read the shapefile
