@@ -39,13 +39,13 @@ def calculate_cloud_mask(scl: openeo.DataCube) -> openeo.DataCube:
 
 def calculate_snow(scl: openeo.DataCube) -> openeo.DataCube:
     """
-    Calculate cloud mask from SCL data.
+    Calculate snow mask from SCL data.
     Args:
         scl (openeo.datacube.DataCube): SCL data cube.
     Returns:
         openeo.datacube.DataCube: Cloud mask data cube.
     """
-    _log.info(f'calculating cloud mask')
+    _log.info(f'calculating snow mask')
 
     classification = scl.band("SCL")
     clouds = ((classification == 7) | (classification == 8) | (classification == 9) ) * 1.0
