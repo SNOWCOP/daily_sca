@@ -16,7 +16,7 @@ import xarray as xr
 
 import geopandas as gpd
 from openeo.processes import (and_, is_nan, is_valid, not_, is_nodata, or_, 
-                              if_, array_create)
+                              if_, array_create, ProcessBuilder)
 
 from utils_gapfilling import *
 from utils import *
@@ -104,8 +104,14 @@ modis = eoconn.load_stac("https://stac.eurac.edu/collections/MOD10A1v61",
 # Get the snow cover information
 # ==============================
 
-# get the snow mask
-snow = calculate_snow(scl)
+
+def snow_callback(scl_data:ProcessBuilder):
+    classification:ProcessBuilder = scl_data["SCL"]
+    snow_pixel = (classification == 11) * 100
+    return if_( (classification == 7).or_(classification == 8).or_(classification == 9) , 205, snow_pixel)
+
+snow = scl.apply_dimension(dimension="bands", process=snow_callback)
+snow = snow.rename_labels(dimension="bands", target=["snow"])
 
 
 # resample to 20 m spatial resolution
@@ -114,33 +120,38 @@ snow_rsmpl = snow.resample_spatial(resolution=res,
                                  method = "near")
 # snow_rsmpl.download('../results/snow_rsmpl.nc')
 
+
 # mask with valid and snow pixels
 total_mask = create_mask(snow_rsmpl)
 
 # get SCF
 average = total_mask.resample_cube_spatial(modis, method="average")
 
-# SCF [0-1]
-scf_lr = average.band("snow")/average.band("valid")
-scf_lr = scf_lr.multiply(100.)
-scf_lr = scf_lr.apply(lambda x: if_(is_nan(x), 205, x))
+
+def create_scf_lr_masked(average_bands: ProcessBuilder):
+    
+    # SCF [0-1]
+    snow_band = average_bands["snow"]
+    valid_band = average_bands["valid"]
+    
+    scf_lr = 100.0 * snow_band / valid_band
+    scf_lr = if_(is_nan(scf_lr), 205, scf_lr)
+    
+    # Compute the minimum SCF (SCF that you would obtain if the non valid pixels are replaced with 0-snow free)
+    # SCF min and max are not used here (but will be used in another step of the workflow..)
+    #scf_min = snow_band
+    #scf_max = 1 - valid_band + snow_band
+    # Replace pixels with non valid data < threshold with 205
+    valid_threshold = 1 - nv_thres / 100
+    scf_lr_masked = if_(valid_band <= valid_threshold,nv_value,scf_lr)
+    
+    return scf_lr_masked
+
+scf_lr_masked = average.apply_dimension(dimension="bands",process=create_scf_lr_masked)
+scf_lr_masked = scf_lr_masked.rename_labels(dimension="bands",target=['scf'])
 
 
-# Compute the minimum SCF (SCF that you would obtain if the non valid pixels are replaced with 0-snow free)
-# SCF min and max are not used here (but will be used in another step of the workflow..)
-scf_min = average.band("snow")
-scf_max = 1 - average.band("valid") + average.band("snow")
 
-# scf_min.download('../results/scf_min.nc')
-# scf_max.download('../results/scf_max.nc')
-
-
-# Replace pixels with non valid data < threshold with 205
-valid_threshold = 1-nv_thres/100
-
-nv_mask = (average.band("valid")<=valid_threshold)*1.0
-scf_lr_masked = scf_lr.mask(nv_mask, replacement=nv_value)
-# scf_lr_masked.download('../results/scf_lr_masked.nc')
 
 # ==============================
 # Conditional probabilities
@@ -148,7 +159,7 @@ scf_lr_masked = scf_lr.mask(nv_mask, replacement=nv_value)
 scf_dic = get_scf_ranges(delta, epsilon)
 
 # we need to add the dimension bands before applying the function
-scf_lr_masked = scf_lr_masked.add_dimension(type="bands",name="bands",label='scf')
+# scf_lr_masked = scf_lr_masked.add_dimension(type="bands",name="bands",label='scf')
 
 def scf_to_bands(scf_lr_masked):
     result = []
@@ -208,20 +219,22 @@ occurences = occurences.filter_bands(bands = labels_scf)
 # conditional probabilities
 cp = sum_cp_snow/occurences
 
-cp.download("../results/cp.nc")
+job = cp.create_job(title="cp")
+job.start()
+
 
 xx
 
 
 
-job = cp.create_job(title="cp_hr_short")
+job = cp.create_job(title="scf_lr_masked_new")
 job.start()
 
 # cp.download("../results/cp.nc")
 # occurences.download("../results/occurences.nc")
 
 results = job.get_results()
-results.download_files("../results/cp_hr_short.nc")
+results.download_files("../results/scf_lr_masked_new.nc")
 
 
 
@@ -231,12 +244,13 @@ results.download_files("../results/cp_hr_short.nc")
 # job.start()
 
 
-ds = xr.open_dataset(r'../results/occurences.nc')
+ds = xr.open_dataset(r'../results/cp_test3.nc')
 ds.scf_60_70.plot()
 
+ds = xr.open_dataset(r'../results/cp_test1.nc')
+ds.scf_60_70.plot()
 
-
-ds = xr.open_dataset(r'../results/all_masks.nc')
+ds = xr.open_dataset(r'../results/scf_lr_masked_old.nc')
 ds.scf_60_70.plot()
 
 ds.snow.sel(t='2025-04-02').plot()

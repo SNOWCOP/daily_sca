@@ -37,6 +37,9 @@ def calculate_cloud_mask(scl: openeo.DataCube) -> openeo.DataCube:
     return binary
 
 
+
+
+
 def calculate_snow(scl: openeo.DataCube) -> openeo.DataCube:
     """
     Calculate snow mask from SCL data.
